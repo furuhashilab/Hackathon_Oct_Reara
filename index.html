@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fotoshi × 大阪 — SotM Asia 2026 振り返りマップ</title>
+<meta name="description" content="Fotoshi STAC API の大阪エリアの写真を MapLibre GL JS で地図表示する、SotM Asia 2026 振り返りハッカソン作品">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #161a21;
+    --panel-2: #1d222b;
+    --line: #2a303b;
+    --text: #e6e8ec;
+    --muted: #8b93a3;
+    --accent: #ff7a45;
+    --accent-soft: rgba(255, 122, 69, .16);
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.5 system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif;
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    grid-template-rows: 100%;
+  }
+  aside {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    background: var(--panel);
+    border-right: 1px solid var(--line);
+  }
+  header { padding: 16px 16px 12px; border-bottom: 1px solid var(--line); }
+  h1 { font-size: 16px; margin: 0 0 4px; line-height: 1.35; }
+  h1 .x { color: var(--accent); }
+  .sub { color: var(--muted); font-size: 12px; margin: 0; }
+  .stats { margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .stats b { color: var(--text); font-variant-numeric: tabular-nums; }
+  #list { list-style: none; margin: 0; padding: 8px; overflow-y: auto; flex: 1; }
+  #list li {
+    display: grid;
+    grid-template-columns: 72px 1fr;
+    gap: 10px;
+    padding: 6px;
+    border-radius: 8px;
+    cursor: pointer;
+    border: 1px solid transparent;
+  }
+  #list li:hover { background: var(--panel-2); }
+  #list li.active { background: var(--accent-soft); border-color: var(--accent); }
+  #list img {
+    width: 72px; height: 54px; object-fit: cover;
+    border-radius: 6px; background: var(--panel-2); display: block;
+  }
+  #list .meta { min-width: 0; font-size: 12px; }
+  #list .date { font-weight: 600; font-size: 13px; }
+  #list .who, #list .coord { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  footer {
+    padding: 10px 16px; border-top: 1px solid var(--line);
+    font-size: 11px; color: var(--muted);
+  }
+  a { color: var(--accent); }
+  #map { height: 100%; }
+  #status {
+    position: absolute; left: 50%; top: 16px; transform: translateX(-50%);
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    padding: 8px 14px; z-index: 2;
+  }
+
+  .maplibregl-popup-content {
+    background: var(--panel); color: var(--text);
+    padding: 0; border-radius: 10px; overflow: hidden;
+    box-shadow: 0 8px 24px rgba(0,0,0,.5);
+  }
+  .maplibregl-popup-tip { border-top-color: var(--panel) !important; border-bottom-color: var(--panel) !important; }
+  .maplibregl-popup-close-button { color: #fff; font-size: 20px; padding: 0 8px; text-shadow: 0 0 4px #000; }
+  .popup img { display: block; width: 300px; max-width: 70vw; height: auto; background: var(--panel-2); }
+  .popup .body { padding: 10px 12px; font-size: 12px; }
+  .popup .body div + div { margin-top: 2px; }
+  .popup .muted { color: var(--muted); }
+  .maplibregl-ctrl-attrib { background: rgba(15,17,21,.8) !important; color: var(--muted); }
+  .maplibregl-ctrl-attrib a { color: var(--text); }
+  .maplibregl-ctrl-group { background: var(--panel); }
+  .maplibregl-ctrl-group button + button { border-top-color: var(--line); }
+  .maplibregl-ctrl-group button .maplibregl-ctrl-icon { filter: invert(1); }
+
+  @media (max-width: 720px) {
+    body { grid-template-columns: 1fr; grid-template-rows: 55% 45%; }
+    aside { order: 2; border-right: 0; border-top: 1px solid var(--line); }
+    main { order: 1; }
+  }
+</style>
+</head>
+<body>
+<aside>
+  <header>
+    <h1>Fotoshi <span class="x">×</span> 大阪</h1>
+    <p class="sub">SotM Asia 2026 振り返りマップ</p>
+    <div class="stats" id="stats">読み込み中…</div>
+  </header>
+  <ul id="list"></ul>
+  <footer>
+    写真: <a href="https://fotoshi.com" target="_blank" rel="noopener">Fotoshi</a> 投稿者 /
+    <a href="https://creativecommons.org/licenses/by/4.0/deed.ja" target="_blank" rel="noopener">CC BY 4.0</a><br>
+    地図: © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a><br>
+    データ取得: Fotoshi STAC API（<span id="fetched"></span>）
+  </footer>
+</aside>
+<main style="position:relative">
+  <div id="map"></div>
+  <div id="status" hidden></div>
+</main>
+
+<script>
+  const DATA_URL = "data/osaka.geojson";
+  const BBOX = [135.3, 34.5, 135.7, 34.8];
+
+  const listEl = document.getElementById("list");
+  const statusEl = document.getElementById("status");
+  const fmtDate = (iso) => new Date(iso).toLocaleString("ja-JP", {
+    timeZone: "Asia/Tokyo", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit"
+  });
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const author = (p) => p.creator_name || p.username || "不明";
+
+  const map = new maplibregl.Map({
+    container: "map",
+    bounds: BBOX,
+    fitBoundsOptions: { padding: 20 },
+    style: {
+      version: 8,
+      sources: {
+        osm: {
+          type: "raster",
+          tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+          tileSize: 256,
+          maxzoom: 19,
+          attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap contributors</a>'
+        }
+      },
+      layers: [
+        { id: "bg", type: "background", paint: { "background-color": "#0f1115" } },
+        {
+          id: "osm", type: "raster", source: "osm",
+          // OSM 標準タイルの明暗を反転し、色相を戻して低彩度のダーク地図にする
+          paint: { "raster-brightness-min": 0.92, "raster-brightness-max": 0.08, "raster-hue-rotate": 180, "raster-saturation": -0.6, "raster-contrast": 0.05 }
+        }
+      ]
+    },
+    attributionControl: false
+  });
+  map.addControl(new maplibregl.NavigationControl(), "top-right");
+  map.addControl(new maplibregl.ScaleControl(), "bottom-left");
+  map.addControl(new maplibregl.AttributionControl({
+    compact: false,
+    customAttribution: 'Photos: <a href="https://fotoshi.com" target="_blank">Fotoshi</a> contributors, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank">CC BY 4.0</a>'
+  }));
+
+  let popup;
+  function showPhoto(f, { fly = true } = {}) {
+    const p = f.properties;
+    const assets = p.assets;
+    const coords = f.geometry.coordinates;
+    if (fly) map.flyTo({ center: coords, zoom: Math.max(map.getZoom(), 16) });
+    popup?.remove();
+    popup = new maplibregl.Popup({ maxWidth: "none", offset: 10 })
+      .setLngLat(coords)
+      .setHTML(`
+        <div class="popup">
+          <a href="${esc(assets["image-2560"] || assets["image-1280"])}" target="_blank" rel="noopener">
+            <img src="${esc(assets["image-640"] || assets.thumbnail)}" alt="${esc(author(p))} による写真">
+          </a>
+          <div class="body">
+            <div><b>${esc(fmtDate(p.datetime))}</b></div>
+            <div>📷 ${esc(author(p))}${p.source_organization ? ` / ${esc(p.source_organization)}` : ""}</div>
+            <div class="muted">${coords[1].toFixed(5)}, ${coords[0].toFixed(5)}</div>
+            <div class="muted">© ${esc(author(p))} / Fotoshi —
+              <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">${esc(p.license === "CC-BY-4.0" ? "CC BY 4.0" : p.license)}</a></div>
+          </div>
+        </div>`)
+      .addTo(map);
+    map.setFilter("photo-selected", ["==", ["get", "pid"], String(f.id)]);
+    document.querySelectorAll("#list li").forEach((li) => li.classList.toggle("active", li.dataset.id === String(f.id)));
+    document.querySelector(`#list li[data-id="${CSS.escape(String(f.id))}"]`)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }
+
+  function renderList(features) {
+    const frag = document.createDocumentFragment();
+    for (const f of features) {
+      const p = f.properties;
+      const [lng, lat] = f.geometry.coordinates;
+      const li = document.createElement("li");
+      li.dataset.id = f.id;
+      li.innerHTML = `
+        <img loading="lazy" src="${esc(p.assets.thumbnail)}" alt="">
+        <div class="meta">
+          <div class="date">${esc(fmtDate(p.datetime))}</div>
+          <div class="who">📷 ${esc(author(p))}</div>
+          <div class="coord">${lat.toFixed(4)}, ${lng.toFixed(4)}</div>
+        </div>`;
+      li.addEventListener("click", () => showPhoto(f));
+      frag.appendChild(li);
+    }
+    listEl.replaceChildren(frag);
+  }
+
+  async function loadData() {
+    const res = await fetch(DATA_URL);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  }
+
+  // タイル読み込み完了（load）を待たず、スタイルが使えるようになった時点でレイヤを追加する
+  const styleReady = new Promise((r) => (map.isStyleLoaded() ? r() : map.once("style.load", r)));
+
+  loadData()
+    .then(async (fc) => {
+      const features = fc.features;
+      // 文字列IDはベクタ化で失われるため properties に複製して参照する
+      features.forEach((f) => (f.properties.pid = String(f.id)));
+      const authors = new Set(features.map((f) => author(f.properties)));
+      const dates = features.map((f) => f.properties.datetime).sort();
+      document.getElementById("stats").innerHTML =
+        `<b>${features.length}</b> 枚 · 投稿者 <b>${authors.size}</b> 人<br>` +
+        (dates.length ? `${fmtDate(dates[0])} 〜 ${fmtDate(dates.at(-1))}` : "");
+      document.getElementById("fetched").textContent = fc.fetched_at ? `${fmtDate(fc.fetched_at)} 時点` : "";
+
+      renderList(features);
+
+      await styleReady;
+      map.addSource("photos", { type: "geojson", data: fc });
+      map.addLayer({
+        id: "photo-halo", type: "circle", source: "photos",
+        paint: { "circle-radius": ["interpolate", ["linear"], ["zoom"], 10, 6, 17, 12], "circle-color": "#ff7a45", "circle-opacity": 0.18 }
+      });
+      map.addLayer({
+        id: "photo-points", type: "circle", source: "photos",
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 10, 3, 17, 7],
+          "circle-color": "#ff7a45",
+          "circle-stroke-color": "#0f1115",
+          "circle-stroke-width": 1.2
+        }
+      });
+      map.addLayer({
+        id: "photo-selected", type: "circle", source: "photos",
+        filter: ["==", ["get", "pid"], ""],
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 10, 7, 17, 12],
+          "circle-color": "#ffffff",
+          "circle-stroke-color": "#ff7a45",
+          "circle-stroke-width": 3
+        }
+      });
+
+      const byId = new Map(features.map((f) => [String(f.id), f]));
+      map.on("click", "photo-points", (e) => {
+        const f = byId.get(e.features[0].properties.pid);
+        if (f) showPhoto(f, { fly: false });
+      });
+      map.on("mouseenter", "photo-points", () => (map.getCanvas().style.cursor = "pointer"));
+      map.on("mouseleave", "photo-points", () => (map.getCanvas().style.cursor = ""));
+
+      if (features.length) {
+        const b = new maplibregl.LngLatBounds();
+        features.forEach((f) => b.extend(f.geometry.coordinates));
+        map.fitBounds(b, { padding: 60, maxZoom: 15, duration: 0 });
+      }
+    })
+    .catch((err) => {
+      console.error(err);
+      statusEl.textContent = `写真データの読み込みに失敗しました: ${err.message}`;
+      statusEl.hidden = false;
+      document.getElementById("stats").textContent = "読み込み失敗";
+    });
+</script>
+</body>
+</html>
