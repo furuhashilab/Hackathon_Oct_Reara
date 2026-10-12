@@ -2,7 +2,7 @@
 
 [Fotoshi](https://fotoshi.com) の STAC API から大阪エリアで撮影された写真を取得し、[MapLibre GL JS](https://maplibre.org/) で地図上に表示する Web アプリです。State of the Map Asia 2026 振り返りハッカソンの作品です。
 
-**公開ページ:** https://furuhashilab.github.io/hackhason_Oct_Reara/
+**公開ページ:** https://furuhashilab.github.io/Hackathon_Oct_Reara/
 
 ## 機能
 
